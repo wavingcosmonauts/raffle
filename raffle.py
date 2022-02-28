@@ -3,6 +3,7 @@
 """Python script to run our raffle."""
 
 import contextlib
+import datetime
 import random
 import subprocess
 import tempfile
@@ -18,11 +19,12 @@ TEAM_FRAC = 0.2
 RAFFLE_FRAC = 1 - TEAM_FRAC
 
 
-def get_stars_rewards(address):
+def get_pool_info(address):
     """Current number of staking rewards of this Stargaze address."""
     # TODO implement
     rewards = 252
-    return rewards * RAFFLE_FRAC, rewards * TEAM_FRAC
+    pool_value = 5_000
+    return pool_value, rewards * RAFFLE_FRAC, rewards * TEAM_FRAC
 
 
 def get_holder(nft_id):
@@ -78,9 +80,35 @@ def convert_addr(src: str, target: str = "osmo"):
     return addrs[1]
 
 
+def update_winner_file(
+    *,
+    winner_id,
+    winner_addr,
+    prize,
+    guild,
+    pool_value,
+    path: str = "data/winner_variables.js",
+):
+    today = datetime.date.today()
+    next_raffle = today + datetime.timedelta(days=7)
+
+    with open(path, "w") as f:
+        f.write(f'const date = "{today}";\n')
+        f.write(f'const nextDate = "{next_raffle}";\n')
+        f.write(f'const winnerNumber = "{winner_id:03d}";\n')
+        f.write(f'const winnerAddress = "{winner_addr}";\n')
+        f.write(f'const guild = "{guild}";\n')
+        # TODO
+        # Consider actual token and / or USD value
+        # Issue with token: swap fee + time difference to osmosis will make the actual
+        # number different
+        f.write(f'const prize = "{prize:.2f} $STARS";\n')
+        f.write(f'const poolValue = "{pool_value:.0f} $STARS";\n')
+
+
 def main():
     print("Starting raffle!")
-    stars_raffle, stars_team = get_stars_rewards(ADDRESS)
+    pool_value, stars_raffle, stars_team = get_pool_info(ADDRESS)
     print(f"Today's 🎁 : {stars_raffle:.2f} $STARS\n")
 
     with print_progress("Getting all holders"):
@@ -90,7 +118,6 @@ def main():
         boosts = [get_boost(holder) for holder in holders]
 
     with print_progress("Picking a winner"):
-        time.sleep(1)
         (winner_addr,) = random.choices(holders, boosts)
         winner_id = holders.index(winner_addr)
         winner_guild = get_guild(winner_id)
@@ -107,6 +134,14 @@ def main():
             osmo_addr = convert_addr(winner_addr)
             print(f"\t\t   Osmo address:  {osmo_addr}")
         print("\n")
+
+    update_winner_file(
+        winner_id=winner_id,
+        winner_addr=winner_addr,
+        prize=stars_raffle,
+        guild=winner_guild,
+        pool_value=pool_value,
+    )
 
 
 if __name__ == "__main__":

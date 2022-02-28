@@ -21,3 +21,14 @@ jobs:
     - name: Launch raffle
       run: |
         python raffle.py
+    - name: Git information
+      run: |
+        pwd
+        git diff
+        git branch
+    # - name: Commit last winner to data file
+    #   run:
+    #     git config --local user.email "cosmonautnft@users.noreply.github.com"
+    #     git config --local user.name "cosmonautnft gh bot"
+    #     git add .
+    #     git commit -a -m "Update last winner on '$(date)'"
