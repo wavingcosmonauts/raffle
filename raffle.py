@@ -2,6 +2,8 @@
 
 """Python script to run our raffle."""
 
+import base64
+import collections
 import contextlib
 import datetime
 import random
@@ -11,9 +13,34 @@ import tempfile
 import time
 
 ADDRESS = "stars1u2cup60zf0dujuhd4sth09gvdc383p0jguaqp3"
-COSMONAUTS = list(range(384))  # This should be NFT contracts
 TEAM_FRAC = 0.384
 RAFFLE_FRAC = 1 - TEAM_FRAC
+
+STARTY_MINTER = "stars1fqsqgjlurc7z2sntulfa0f9alk2ke5npyxrze9deq7lujas7m3ss7vq2fe"
+COSMONAUT_MINTER = STARTY_MINTER  # TODO update once online
+
+
+def get_holders(
+    minter_addr: str,
+    n_tokens: int,
+    api_url: str = "https://rest.stargaze-apis.com/cosmwasm/wasm/v1/contract/",
+):
+    sg721_url = f"{api_url}/{minter_addr}/smart/eyJjb25maWciOnt9fQ=="
+    response = requests.get(sg721_url)
+    data = response.json()
+    sg721 = data["data"]["sg721_address"]
+
+    def get_holder(token_id: int):
+        query = (
+            base64.encodebytes(f'{{"owner_of":{{"token_id":"{token_id}"}}}}'.encode())
+            .decode()
+            .strip()
+        )
+        query_url = f"{api_url}/{sg721}/smart/{query}"
+        response = requests.get(query_url)
+        return response.json()["data"]["owner"]
+
+    return [get_holder(i + 1) for i in range(n_tokens)]
 
 
 def get_pool_info(address, api_url="https://rest.stargaze-apis.com/cosmos"):
@@ -38,23 +65,16 @@ def get_pool_info(address, api_url="https://rest.stargaze-apis.com/cosmos"):
     return pool_value, rewards
 
 
-def get_holder(nft_id):
-    """Retrieve Stargaze address for this NFT."""
-    # TODO implement
-    return ADDRESS
-
-
-def get_boost(holder):
+def get_boost(holder, cosmonaut_counter, starty_counter):
     """Probability weight boost for each cosmonaut holder."""
-    n_startys = get_num_startys(holder)
-    starty_boost = 1.0 + min(n_startys / 10, 1.0)
+    n_startys = starty_counter.get(holder, 0)
+    n_cosmonauts = cosmonaut_counter[holder]
+    # Distribute startys equally over all cosmonauts the holder has
+    # This may currently give a fraction of a starty to each cosmonaut, which is not an
+    # issue mathematically, but does not make sense from an explorer point of view
+    # TODO consider only fixed integer distribution
+    starty_boost = 1.0 + min(n_startys / 10 / n_cosmonauts, 1.0)
     return starty_boost
-
-
-def get_num_startys(holder):
-    """Retrieve number of startys this address holds."""
-    # TODO implement
-    return 0
 
 
 def get_guild(cosmonaut_id: int):
@@ -123,15 +143,21 @@ def main():
     stars_raffle = pool_rewards * RAFFLE_FRAC
     print(f"Today's 🎁 : {stars_raffle:.2f} $STARS\n")
 
-    with print_progress("Getting all holders"):
-        holders = [get_holder(cosmonaut_id) for cosmonaut_id in COSMONAUTS]
+    with print_progress("Getting all cosmonaut holders"):
+        cosmonauts = get_holders(COSMONAUT_MINTER, 384)
+    cosmonaut_counter = collections.Counter(cosmonauts)
 
-    with print_progress("Getting the boost of each holder"):
-        boosts = [get_boost(holder) for holder in holders]
+    with print_progress("Getting all starty holders"):
+        startys = get_holders(STARTY_MINTER, 1111)
+    starty_counter = collections.Counter(startys)
+
+    boosts = [
+        get_boost(holder, cosmonaut_counter, starty_counter) for holder in cosmonauts
+    ]
 
     with print_progress("Picking a winner"):
-        (winner_addr,) = random.choices(holders, boosts)
-        winner_id = holders.index(winner_addr)
+        (winner_addr,) = random.choices(cosmonauts, boosts)
+        winner_id = cosmonauts.index(winner_addr)
         winner_guild = get_guild(winner_id)
         print(
             f"\n\t\tCongratulations cosmonaut #{winner_id:03d}",
