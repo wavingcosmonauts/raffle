@@ -5,26 +5,37 @@
 import contextlib
 import datetime
 import random
+import requests
 import subprocess
 import tempfile
 import time
 
-# TODO know which guild the winning cosmonaut is from
-# => convert $STARS to the corresponding reward and receiving address to osmo*
-
-# Our stargaze community pool address  # TODO update
-ADDRESS = "stars1msylh4vxq8uyz6cwcerme3yyq3cjpanphs2763"
+ADDRESS = "stars1u2cup60zf0dujuhd4sth09gvdc383p0jguaqp3"
 COSMONAUTS = list(range(384))  # This should be NFT contracts
-TEAM_FRAC = 0.2
+TEAM_FRAC = 0.384
 RAFFLE_FRAC = 1 - TEAM_FRAC
 
 
-def get_pool_info(address):
-    """Current number of staking rewards of this Stargaze address."""
-    # TODO implement
-    rewards = 252
-    pool_value = 5_000
-    return pool_value, rewards * RAFFLE_FRAC, rewards * TEAM_FRAC
+def get_pool_info(address, api_url="https://rest.stargaze-apis.com/cosmos"):
+    """Pool value and current rewards via rest API.
+
+    Useful links:
+        https://api.akash.smartnodes.one/swagger/#/
+        https://github.com/Smart-Nodes/endpoints
+    """
+    rewards_url = f"{api_url}/distribution/v1beta1/delegators/{ADDRESS}/rewards"
+    response_rewards = requests.get(rewards_url)
+    data = response_rewards.json()
+    rewards = float(data["rewards"][0]["reward"][0]["amount"]) / 1_000_000
+
+    delegated_url = f"{api_url}/staking/v1beta1/delegations/{ADDRESS}"
+    response_delegated = requests.get(delegated_url)
+    data = response_delegated.json()
+    pool_value = (
+        float(data["delegation_responses"][0]["delegation"]["shares"]) / 1_000_000
+    )
+
+    return pool_value, rewards
 
 
 def get_holder(nft_id):
@@ -103,12 +114,13 @@ def update_winner_file(
         # Issue with token: swap fee + time difference to osmosis will make the actual
         # number different
         f.write(f'const prize = "{prize:.2f} $STARS";\n')
-        f.write(f'const poolValue = "{pool_value:.0f} $STARS";\n')
+        f.write(f'const poolValue = "{pool_value:,.0f} $STARS";\n')
 
 
 def main():
     print("Starting raffle!")
-    pool_value, stars_raffle, stars_team = get_pool_info(ADDRESS)
+    pool_value, pool_rewards = get_pool_info(ADDRESS)
+    stars_raffle = pool_rewards * RAFFLE_FRAC
     print(f"Today's 🎁 : {stars_raffle:.2f} $STARS\n")
 
     with print_progress("Getting all holders"):
