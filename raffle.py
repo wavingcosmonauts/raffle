@@ -164,8 +164,6 @@ async def main():
         for holder in cosmonauts.values()
     ]
 
-    print(cosmonauts)
-
     with print_progress("Picking a winner"):
         (winner_id, ) = random.choices(list(cosmonauts), boosts)
         winner_addr = cosmonauts[winner_id]
