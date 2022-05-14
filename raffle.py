@@ -2,15 +2,17 @@
 
 """Python script to run our raffle."""
 
+import asyncio
 import base64
 import collections
 import contextlib
 import datetime
 import random
-import requests
 import subprocess
 import tempfile
 import time
+
+import aiohttp
 
 ADDRESS = "stars1u2cup60zf0dujuhd4sth09gvdc383p0jguaqp3"
 TEAM_FRAC = 0.384
@@ -20,30 +22,39 @@ STARTY_MINTER = "stars1fqsqgjlurc7z2sntulfa0f9alk2ke5npyxrze9deq7lujas7m3ss7vq2f
 COSMONAUT_MINTER = STARTY_MINTER  # TODO update once online
 
 
-def get_holders(
+async def get_holders(
     minter_addr: str,
     n_tokens: int,
     api_url: str = "https://rest.stargaze-apis.com/cosmwasm/wasm/v1/contract/",
 ):
-    sg721_url = f"{api_url}/{minter_addr}/smart/eyJjb25maWciOnt9fQ=="
-    response = requests.get(sg721_url)
-    data = response.json()
-    sg721 = data["data"]["sg721_address"]
+    async with aiohttp.ClientSession() as session:
+        sg721_url = f"{api_url}/{minter_addr}/smart/eyJjb25maWciOnt9fQ=="
+        data = await gather_json(session, sg721_url)
+        sg721 = data["data"]["sg721_address"]
 
-    def get_holder(token_id: int):
-        query = (
-            base64.encodebytes(f'{{"owner_of":{{"token_id":"{token_id}"}}}}'.encode())
-            .decode()
-            .strip()
-        )
-        query_url = f"{api_url}/{sg721}/smart/{query}"
-        response = requests.get(query_url)
-        return response.json()["data"]["owner"]
+        async def get_holder(token_id: int):
+            query = (
+                base64.encodebytes(f'{{"owner_of":{{"token_id":"{token_id}"}}}}'.encode())
+                .decode()
+                .strip()
+            )
+            query_url = f"{api_url}/{sg721}/smart/{query}"
+            data = await gather_json(session, query_url)
+            try:
+                return data["data"]["owner"]
+            except KeyError:  # Token not minted yet
+                return ""  # Pool wins
 
-    return [get_holder(i + 1) for i in range(n_tokens)]
+        tasks = [get_holder(i + 1) for i in range(n_tokens)]
+        return await asyncio.gather(*tasks)
 
 
-def get_pool_info(address, api_url="https://rest.stargaze-apis.com/cosmos"):
+async def gather_json(session: aiohttp.ClientSession, url: str):
+    async with session.get(url) as response:
+        return await response.json()
+
+
+async def get_pool_info(address, api_url="https://rest.stargaze-apis.com/cosmos"):
     """Pool value and current rewards via rest API.
 
     Useful links:
@@ -51,15 +62,16 @@ def get_pool_info(address, api_url="https://rest.stargaze-apis.com/cosmos"):
         https://github.com/Smart-Nodes/endpoints
     """
     rewards_url = f"{api_url}/distribution/v1beta1/delegators/{ADDRESS}/rewards"
-    response_rewards = requests.get(rewards_url)
-    data = response_rewards.json()
-    rewards = float(data["rewards"][0]["reward"][0]["amount"]) / 1_000_000
 
     delegated_url = f"{api_url}/staking/v1beta1/delegations/{ADDRESS}"
-    response_delegated = requests.get(delegated_url)
-    data = response_delegated.json()
+
+    async with aiohttp.ClientSession() as session:
+        rewards_data, pool_data = await asyncio.gather(
+            gather_json(session, rewards_url), gather_json(session, delegated_url)
+        )
+    rewards = float(rewards_data["rewards"][0]["reward"][0]["amount"]) / 1_000_000
     pool_value = (
-        float(data["delegation_responses"][0]["delegation"]["shares"]) / 1_000_000
+        float(pool_data["delegation_responses"][0]["balance"]["amount"]) / 1_000_000
     )
 
     return pool_value, rewards
@@ -79,9 +91,9 @@ def get_boost(holder, cosmonaut_counter, starty_counter):
 
 def get_guild(cosmonaut_id: int):
     """Retrieve guild of this cosmonaut."""
-    # TODO implement
+    # TODO implement once all cosmonauts are minted
     # Simple reading from a traits summary file
-    return random.choice(("stars", "osmo", "akt", "luna", "scrt"))
+    raise NotImplementedError("Waiting for the mint to complete")
 
 
 @contextlib.contextmanager
@@ -116,39 +128,31 @@ def update_winner_file(
     winner_id,
     winner_addr,
     prize,
-    guild,
-    pool_value,
     path: str = "data/winner_variables.js",
 ):
-    today = datetime.date.today()
-    next_raffle = today + datetime.timedelta(days=7)
-
     with open(path, "w") as f:
-        f.write(f'const date = "{today}";\n')
-        f.write(f'const nextDate = "{next_raffle}";\n')
         f.write(f'const winnerNumber = "{winner_id:03d}";\n')
         f.write(f'const winnerAddress = "{winner_addr}";\n')
-        f.write(f'const guild = "{guild}";\n')
-        # TODO
-        # Consider actual token and / or USD value
+        # TODO add back once all are minted
+        # f.write(f'const guild = "{guild}";\n')
+        # TODO Consider actual token and / or USD value
         # Issue with token: swap fee + time difference to osmosis will make the actual
         # number different
         f.write(f'const prize = "{prize:.2f} $STARS";\n')
-        f.write(f'const poolValue = "{pool_value:,.0f} $STARS";\n')
 
 
-def main():
+async def main():
     print("Starting raffle!")
-    pool_value, pool_rewards = get_pool_info(ADDRESS)
+    pool_value, pool_rewards = await get_pool_info(ADDRESS)
     stars_raffle = pool_rewards * RAFFLE_FRAC
     print(f"Today's 🎁 : {stars_raffle:.2f} $STARS\n")
 
     with print_progress("Getting all cosmonaut holders"):
-        cosmonauts = get_holders(COSMONAUT_MINTER, 384)
+        cosmonauts = await get_holders(COSMONAUT_MINTER, 384)
     cosmonaut_counter = collections.Counter(cosmonauts)
 
     with print_progress("Getting all starty holders"):
-        startys = get_holders(STARTY_MINTER, 1111)
+        startys = await get_holders(STARTY_MINTER, 1111)
     starty_counter = collections.Counter(startys)
 
     boosts = [
@@ -156,31 +160,27 @@ def main():
     ]
 
     with print_progress("Picking a winner"):
-        (winner_addr,) = random.choices(cosmonauts, boosts)
+        winner_addr, = random.choices(cosmonauts, boosts)
         winner_id = cosmonauts.index(winner_addr)
-        winner_guild = get_guild(winner_id)
         print(
-            f"\n\t\tCongratulations cosmonaut #{winner_id:03d}",
-            f"of the {winner_guild} guild 🥂",
+            f"\n\t\tCongratulations cosmonaut #{winner_id:03d} 🥂",
+            # TODO add back f"of the {winner_guild} guild 🥂",
         )
         print(
             "\t\tYour quest was successful!",
             f"You found {stars_raffle:.2f} $STARS worth of resources",
         )
         print(f"\n\t\tWinning address: {winner_addr}")
-        if winner_guild != "stars":
-            osmo_addr = convert_addr(winner_addr)
-            print(f"\t\t   Osmo address:  {osmo_addr}")
+        osmo_addr = convert_addr(winner_addr)
+        print(f"\t\t   Osmo address:  {osmo_addr}")
         print("\n")
 
     update_winner_file(
         winner_id=winner_id,
         winner_addr=winner_addr,
         prize=stars_raffle,
-        guild=winner_guild,
-        pool_value=pool_value,
     )
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
