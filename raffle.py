@@ -6,7 +6,6 @@ import asyncio
 import base64
 import collections
 import contextlib
-import datetime
 import random
 import subprocess
 import tempfile
@@ -19,7 +18,7 @@ TEAM_FRAC = 0.384
 RAFFLE_FRAC = 1 - TEAM_FRAC
 
 STARTY_MINTER = "stars1fqsqgjlurc7z2sntulfa0f9alk2ke5npyxrze9deq7lujas7m3ss7vq2fe"
-COSMONAUT_MINTER = STARTY_MINTER  # TODO update once online
+COSMONAUT_MINTER = "stars18tj7yvh7qxv29wtr4angy4gqycrrj9e5j9susaes7vd4tqafzthq5h2m8r"
 
 
 async def get_holders(
@@ -34,7 +33,9 @@ async def get_holders(
 
         async def get_holder(token_id: int):
             query = (
-                base64.encodebytes(f'{{"owner_of":{{"token_id":"{token_id}"}}}}'.encode())
+                base64.encodebytes(
+                    f'{{"owner_of":{{"token_id":"{token_id}"}}}}'.encode()
+                )
                 .decode()
                 .strip()
             )
@@ -45,8 +46,11 @@ async def get_holders(
             except KeyError:  # Token not minted yet
                 return ""  # Pool wins
 
-        tasks = [get_holder(i + 1) for i in range(n_tokens)]
-        return await asyncio.gather(*tasks)
+        tasks = [get_holder(token_id + 1) for token_id in range(n_tokens)]
+        addresses = await asyncio.gather(*tasks)
+        return {
+            token_id: addr for token_id, addr in enumerate(addresses, start=1) if addr
+        }
 
 
 async def gather_json(session: aiohttp.ClientSession, url: str):
@@ -149,19 +153,22 @@ async def main():
 
     with print_progress("Getting all cosmonaut holders"):
         cosmonauts = await get_holders(COSMONAUT_MINTER, 384)
-    cosmonaut_counter = collections.Counter(cosmonauts)
+    cosmonaut_counter = collections.Counter(cosmonauts.values())
 
     with print_progress("Getting all starty holders"):
         startys = await get_holders(STARTY_MINTER, 1111)
-    starty_counter = collections.Counter(startys)
+    starty_counter = collections.Counter(startys.values())
 
     boosts = [
-        get_boost(holder, cosmonaut_counter, starty_counter) for holder in cosmonauts
+        get_boost(holder, cosmonaut_counter, starty_counter)
+        for holder in cosmonauts.values()
     ]
 
+    print(cosmonauts)
+
     with print_progress("Picking a winner"):
-        winner_addr, = random.choices(cosmonauts, boosts)
-        winner_id = cosmonauts.index(winner_addr)
+        (winner_id, ) = random.choices(list(cosmonauts), boosts)
+        winner_addr = cosmonauts[winner_id]
         print(
             f"\n\t\tCongratulations cosmonaut #{winner_id:03d} 🥂",
             # TODO add back f"of the {winner_guild} guild 🥂",
