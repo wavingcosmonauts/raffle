@@ -1,8 +1,6 @@
-name: Waving Cosmonauts Raffle
+name: test
 
-on: schedule
-  # - cron: "0 17 * * 7"
-  - cron: "0 12 * * 2"
+on: [push, pull_request]
 
 jobs:
   test:
