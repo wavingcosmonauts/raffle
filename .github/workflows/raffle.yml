@@ -3,10 +3,10 @@ name: Waving Cosmonauts Raffle
 on:
   schedule:
   # - cron: "0 17 * * 7"
-    - cron: "0 12 * * 2"
+    - cron: "0 12 * * 3"
 
 jobs:
-  test:
+  raffle:
 
     runs-on: ubuntu-20.04
 
