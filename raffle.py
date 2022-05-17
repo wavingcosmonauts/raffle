@@ -151,6 +151,11 @@ async def main():
     stars_raffle = pool_rewards * RAFFLE_FRAC
     print(f"Today's 🎁 : {stars_raffle:.2f} $STARS\n")
 
+    async with aiohttp.ClientSession() as session:
+        url = "https://www.wavingcosmonauts.space/assets/cosmonauts/cosmonaut_data.json"
+        cosmonaut_data = await gather_json(session, url)
+    guilds = [cosmonaut["Guild"] for cosmonaut in cosmonaut_data]
+
     with print_progress("Getting all cosmonaut holders"):
         cosmonauts = await get_holders(COSMONAUT_MINTER, 384)
     cosmonaut_counter = collections.Counter(cosmonauts.values())
@@ -167,9 +172,10 @@ async def main():
     with print_progress("Picking a winner"):
         (winner_id, ) = random.choices(list(cosmonauts), boosts)
         winner_addr = cosmonauts[winner_id]
+        winner_guild = guilds[winner_id - 1]
         print(
-            f"\n\t\tCongratulations cosmonaut #{winner_id:03d} 🥂",
-            # TODO add back f"of the {winner_guild} guild 🥂",
+            f"\n\t\tCongratulations cosmonaut #{winner_id:03d} ",
+            f"of the {winner_guild} guild 🥂",
         )
         print(
             "\t\tYour quest was successful!",
