@@ -1,12 +1,12 @@
 name: Waving Cosmonauts Raffle
 
 on:
-  schedule:
-  # - cron: "0 17 * * 7"
-    - cron: "0 12 * * 3"
+  push
 
 jobs:
   raffle:
+
+    if: contains(github.event.head_commit.message, "Run weekly raffle")
 
     runs-on: ubuntu-20.04
 
