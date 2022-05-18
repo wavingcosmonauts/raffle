@@ -6,7 +6,7 @@ on:
 jobs:
   raffle:
 
-    if: contains(github.event.head_commit.message, "Run weekly raffle")
+    if: contains(github.event.head_commit.message, 'Run weekly raffle')
 
     runs-on: ubuntu-20.04
 
