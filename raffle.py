@@ -93,13 +93,6 @@ def get_boost(holder, cosmonaut_counter, starty_counter):
     return starty_boost
 
 
-def get_guild(cosmonaut_id: int):
-    """Retrieve guild of this cosmonaut."""
-    # TODO implement once all cosmonauts are minted
-    # Simple reading from a traits summary file
-    raise NotImplementedError("Waiting for the mint to complete")
-
-
 @contextlib.contextmanager
 def print_progress(*args, **kwargs):
     print("\t", *args, "...", **kwargs)
@@ -132,13 +125,13 @@ def update_winner_file(
     winner_id,
     winner_addr,
     prize,
+    guild,
     path: str = "data/winner_variables.js",
 ):
     with open(path, "w") as f:
         f.write(f'const winnerNumber = "{winner_id:03d}";\n')
         f.write(f'const winnerAddress = "{winner_addr}";\n')
-        # TODO add back once all are minted
-        # f.write(f'const guild = "{guild}";\n')
+        f.write(f'const guild = "{guild}";\n')
         # TODO Consider actual token and / or USD value
         # Issue with token: swap fee + time difference to osmosis will make the actual
         # number different
@@ -190,6 +183,7 @@ async def main():
         winner_id=winner_id,
         winner_addr=winner_addr,
         prize=stars_raffle,
+        guild=winner_guild,
     )
 
 
