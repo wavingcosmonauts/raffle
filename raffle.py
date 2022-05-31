@@ -17,8 +17,10 @@ ADDRESS = "stars1u2cup60zf0dujuhd4sth09gvdc383p0jguaqp3"
 TEAM_FRAC = 0.384
 RAFFLE_FRAC = 1 - TEAM_FRAC
 
-STARTY_MINTER = "stars1fqsqgjlurc7z2sntulfa0f9alk2ke5npyxrze9deq7lujas7m3ss7vq2fe"
 COSMONAUT_MINTER = "stars18tj7yvh7qxv29wtr4angy4gqycrrj9e5j9susaes7vd4tqafzthq5h2m8r"
+STARTY_MINTER = "stars1fqsqgjlurc7z2sntulfa0f9alk2ke5npyxrze9deq7lujas7m3ss7vq2fe"
+HONOR_STARTY_MINTER = "stars19dzracz083k9plv0gluvnu456frxcrxflaf37ugnj06tdr5xhu5sy3k988"
+HU_MINTER = "stars1lnrdwhf4xcx6w6tdpsghgv6uavem353gtgz77sdreyhts883wdjq52aewm"
 
 
 async def get_holders(
@@ -81,16 +83,22 @@ async def get_pool_info(address, api_url="https://rest.stargaze-apis.com/cosmos"
     return pool_value, rewards
 
 
-def get_boost(holder, cosmonaut_counter, starty_counter):
+def get_boost(
+    holder, *, cosmonaut_counter, starty_counter, honor_starty_counter, hu_counter
+):
     """Probability weight boost for each cosmonaut holder."""
     n_startys = starty_counter.get(holder, 0)
+    n_honor_startys = honor_starty_counter.get(holder, 0)
+    n_planets = hu_counter.get(holder, 0)
     n_cosmonauts = cosmonaut_counter[holder]
-    # Distribute startys equally over all cosmonauts the holder has
-    # This may currently give a fraction of a starty to each cosmonaut, which is not an
+    # Distribute other NFTs equally over all cosmonauts the holder has
+    # This may currently give a fraction of an NFT to each cosmonaut, which is not an
     # issue mathematically, but does not make sense from an explorer point of view
     # TODO consider only fixed integer distribution
-    starty_boost = 1.0 + min(n_startys / 10 / n_cosmonauts, 1.0)
-    return starty_boost
+    starty_boost = min(n_startys / 10 / n_cosmonauts, 1.0)
+    honor_starty_boost = min(n_honor_startys / 10 / n_cosmonauts, 1.0)
+    planet_boost = min(n_planets / 30 / n_cosmonauts, 1.0)
+    return 1.0 + starty_boost + honor_starty_boost + planet_boost
 
 
 @contextlib.contextmanager
@@ -157,13 +165,27 @@ async def main():
         startys = await get_holders(STARTY_MINTER, 1111)
     starty_counter = collections.Counter(startys.values())
 
+    with print_progress("Getting all honor starty holders"):
+        honor_startys = await get_holders(HONOR_STARTY_MINTER, 1111)
+    honor_starty_counter = collections.Counter(honor_startys.values())
+
+    with print_progress("Getting all HU planet holders"):
+        hu_planets = await get_holders(HU_MINTER, 5000)
+    hu_counter = collections.Counter(hu_planets.values())
+
     boosts = [
-        get_boost(holder, cosmonaut_counter, starty_counter)
+        get_boost(
+            holder,
+            cosmonaut_counter=cosmonaut_counter,
+            starty_counter=starty_counter,
+            honor_starty_counter=honor_starty_counter,
+            hu_counter=hu_counter,
+        )
         for holder in cosmonauts.values()
     ]
 
     with print_progress("Picking a winner"):
-        (winner_id, ) = random.choices(list(cosmonauts), boosts)
+        (winner_id,) = random.choices(list(cosmonauts), boosts)
         winner_addr = cosmonauts[winner_id]
         winner_guild = guilds[winner_id - 1]
         print(
