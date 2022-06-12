@@ -148,7 +148,7 @@ def update_winner_file(
 
 async def main():
     print("Starting raffle!")
-    stars_remainder = 123.7842468  # Extra $STARS from delayed rewards claiming
+    stars_remainder = 0.0  # Extra $STARS from delayed rewards claiming
     pool_value, pool_rewards = await get_pool_info(ADDRESS)
     stars_raffle = pool_rewards * RAFFLE_FRAC + stars_remainder
     print(f"Today's 🎁 : {stars_raffle:.2f} $STARS\n")
