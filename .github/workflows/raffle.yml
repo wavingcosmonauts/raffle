@@ -22,3 +22,8 @@ jobs:
     - name: Launch raffle
       run: |
         python raffle.py
+    - name: Commit changes
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        commit_message: Update weekly raffle winner file
+        file_pattern: data/winner_variables.json
