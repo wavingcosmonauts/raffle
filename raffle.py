@@ -6,6 +6,7 @@ import asyncio
 import base64
 import collections
 import contextlib
+import json
 import random
 import subprocess
 import tempfile
@@ -134,16 +135,17 @@ def update_winner_file(
     winner_addr,
     prize,
     guild,
-    path: str = "data/winner_variables.js",
+    path: str = "data/winner_variables.json",
 ):
+    data = {
+        "Number": winner_id,
+        "Address": winner_addr,
+        "Prize": prize,
+        "Guild": guild
+    }
+
     with open(path, "w") as f:
-        f.write(f'const winnerNumber = "{winner_id:03d}";\n')
-        f.write(f'const winnerAddress = "{winner_addr}";\n')
-        f.write(f'const guild = "{guild}";\n')
-        # TODO Consider actual token and / or USD value
-        # Issue with token: swap fee + time difference to osmosis will make the actual
-        # number different
-        f.write(f'const prize = "{prize:.2f} $STARS";\n')
+        json.dump(data, f)
 
 
 async def main():
