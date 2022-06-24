@@ -15,8 +15,9 @@ import time
 import aiohttp
 
 ADDRESS = "stars1u2cup60zf0dujuhd4sth09gvdc383p0jguaqp3"
-TEAM_FRAC = 0.384
-RAFFLE_FRAC = 1 - TEAM_FRAC
+TEAM_FRAC = 0.2
+COMPOUND_FRAC = 0.2
+RAFFLE_FRAC = 1 - TEAM_FRAC - COMPOUND_FRAC
 
 COSMONAUT_MINTER = "stars18tj7yvh7qxv29wtr4angy4gqycrrj9e5j9susaes7vd4tqafzthq5h2m8r"
 STARTY_MINTER = "stars1fqsqgjlurc7z2sntulfa0f9alk2ke5npyxrze9deq7lujas7m3ss7vq2fe"
@@ -153,7 +154,15 @@ async def main():
     stars_remainder = 0.0  # Extra $STARS from delayed rewards claiming
     pool_value, pool_rewards = await get_pool_info(ADDRESS)
     stars_raffle = pool_rewards * RAFFLE_FRAC + stars_remainder
-    print(f"Today's 🎁 : {stars_raffle:.2f} $STARS\n")
+    stars_team = pool_rewards * TEAM_FRAC
+    stars_compound = pool_rewards * COMPOUND_FRAC
+
+    n_winners = 2
+    prize = stars_raffle / n_winners
+
+    print(f"      Note : {stars_compound:.2f} $STARS to compound")
+    print(f"             {stars_team:.2f} $STARS for the team\n")
+    print(f"Today's 🎁 : {prize:.2f} $STARS for {n_winners} cosmonauts\n")
 
     async with aiohttp.ClientSession() as session:
         url = "https://www.wavingcosmonauts.space/assets/cosmonauts/cosmonaut_data.json"
@@ -187,29 +196,35 @@ async def main():
         for holder in cosmonauts.values()
     ]
 
-    with print_progress("Picking a winner"):
-        (winner_id,) = random.choices(list(cosmonauts), boosts)
-        winner_addr = cosmonauts[winner_id]
-        winner_guild = guilds[winner_id - 1]
-        print(
-            f"\n\t\tCongratulations cosmonaut #{winner_id:03d} ",
-            f"of the {winner_guild} guild 🥂",
-        )
-        print(
-            "\t\tYour quest was successful!",
-            f"You found {stars_raffle:.2f} $STARS worth of resources",
-        )
-        print(f"\n\t\tWinning address: {winner_addr}")
-        osmo_addr = convert_addr(winner_addr)
-        print(f"\t\t   Osmo address:  {osmo_addr}")
-        print("\n")
+    with print_progress(f"Picking {n_winners} winners"):
+        winner_ids = random.choices(list(cosmonauts), boosts, k=2)
 
-    update_winner_file(
-        winner_id=winner_id,
-        winner_addr=winner_addr,
-        prize=stars_raffle,
-        guild=winner_guild,
-    )
+        winners = []
+
+        for winner_id in winner_ids:
+            winner_addr = cosmonauts[winner_id]
+            winner_guild = guilds[winner_id - 1]
+            print(
+                f"\n\t\tCongratulations cosmonaut #{winner_id:03d} ",
+                f"of the {winner_guild} guild 🥂",
+            )
+            print(
+                "\t\tYour quest was successful!",
+                f"You found {prize:.2f} $STARS worth of resources",
+            )
+            print(f"\n\t\tWinning address: {winner_addr}")
+            print("\n")
+
+            winners.append({
+                "Number": winner_id,
+                "Address": winner_addr,
+                "Prize": prize,
+                "Guild": winner_guild,
+            })
+
+    # Write to file
+    with open("data/winner_variables.json", "w") as f:
+        json.dump(winners, f, indent=2)
 
 
 if __name__ == "__main__":
