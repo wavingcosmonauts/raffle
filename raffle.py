@@ -164,7 +164,6 @@ async def main():
     stars_delayed = 0.00  # $STARS for last raffle
     pool_value, pool_rewards = await get_pool_info(ADDRESS)
     pool_rewards = pool_rewards + stars_remainder - stars_delayed
-    pool_rewards = 1_000  # Hack for this week only with internet issues
     stars_raffle = pool_rewards * RAFFLE_FRAC
     stars_team = pool_rewards * TEAM_FRAC
     stars_compound = pool_rewards * COMPOUND_FRAC
