@@ -22,6 +22,7 @@ RAFFLE_FRAC = 1 - TEAM_FRAC - COMPOUND_FRAC
 COSMONAUT_MINTER = "stars18tj7yvh7qxv29wtr4angy4gqycrrj9e5j9susaes7vd4tqafzthq5h2m8r"
 STARTY_MINTER = "stars1fqsqgjlurc7z2sntulfa0f9alk2ke5npyxrze9deq7lujas7m3ss7vq2fe"
 HONOR_STARTY_MINTER = "stars19dzracz083k9plv0gluvnu456frxcrxflaf37ugnj06tdr5xhu5sy3k988"
+HW_STARTY_MINTER = "stars1jnzys9u7sfyqm48wptlkgu9ycgteyls2echp8dqdgevvhs43lkvqdvu96v"
 HU_MINTER = "stars1lnrdwhf4xcx6w6tdpsghgv6uavem353gtgz77sdreyhts883wdjq52aewm"
 SK_MINTER = "stars1e3v7h9y3gajtzly37n0g88l9shjlsq2p0pywffty6x676eh6967sg643d2"
 
@@ -92,6 +93,7 @@ def get_boost(
     cosmonaut_counter,
     starty_counter,
     honor_starty_counter,
+    hw_starty_counter,
     hu_counter,
     sk_counter,
 ):
@@ -107,9 +109,17 @@ def get_boost(
     # TODO consider only fixed integer distribution
     starty_boost = min(n_startys / 10 / n_cosmonauts, 1.0)
     honor_starty_boost = min(n_honor_startys / 10 / n_cosmonauts, 1.0)
+    hw_starty_boost = min(n_honor_startys / 4 / n_cosmonauts, 1.0)
     planet_boost = min(n_planets / 30 / n_cosmonauts, 1.0)
     sk_boost = min(n_baddies / 10 / n_cosmonauts, 1.0)
-    return 1.0 + starty_boost + honor_starty_boost + planet_boost + sk_boost
+    return (
+        1.0
+        + starty_boost
+        + honor_starty_boost
+        + hw_starty_boost
+        + planet_boost
+        + sk_boost
+    )
 
 
 @contextlib.contextmanager
@@ -147,12 +157,7 @@ def update_winner_file(
     guild,
     path: str = "data/winner_variables.json",
 ):
-    data = {
-        "Number": winner_id,
-        "Address": winner_addr,
-        "Prize": prize,
-        "Guild": guild
-    }
+    data = {"Number": winner_id, "Address": winner_addr, "Prize": prize, "Guild": guild}
 
     with open(path, "w") as f:
         json.dump(data, f)
@@ -164,15 +169,14 @@ async def main():
     stars_delayed = 0.00  # $STARS for last raffle
     pool_value, pool_rewards = await get_pool_info(ADDRESS)
     pool_rewards = pool_rewards + stars_remainder - stars_delayed
-    stars_raffle = pool_rewards * RAFFLE_FRAC
-    stars_team = pool_rewards * TEAM_FRAC
-    stars_compound = pool_rewards * COMPOUND_FRAC
+
+    stars_raffle = 270 * 2
+    stars_compound = max(pool_rewards - stars_raffle, 0)
 
     n_winners = 2
     prize = stars_raffle / n_winners
 
     print(f"      Note : {stars_compound:.2f} $STARS to compound")
-    print(f"             {stars_team:.2f} $STARS for the team\n")
     print(f"Today's 🎁 : {prize:.2f} $STARS for {n_winners} cosmonauts\n")
 
     async with aiohttp.ClientSession() as session:
@@ -192,6 +196,10 @@ async def main():
         honor_startys = await get_holders(HONOR_STARTY_MINTER, 1111)
     honor_starty_counter = collections.Counter(honor_startys.values())
 
+    with print_progress("Getting all halloween starty holders"):
+        hw_startys = await get_holders(HW_STARTY_MINTER, 66)
+    hw_starty_counter = collections.Counter(hw_startys.values())
+
     with print_progress("Getting all HU planet holders"):
         hu_planets = await get_holders(HU_MINTER, 5000)
     hu_counter = collections.Counter(hu_planets.values())
@@ -206,6 +214,7 @@ async def main():
             cosmonaut_counter=cosmonaut_counter,
             starty_counter=starty_counter,
             honor_starty_counter=honor_starty_counter,
+            hw_starty_counter=hw_starty_counter,
             hu_counter=hu_counter,
             sk_counter=sk_counter,
         )
@@ -231,12 +240,14 @@ async def main():
             print(f"\n\t\tWinning address: {winner_addr}")
             print("\n")
 
-            winners.append({
-                "Number": winner_id,
-                "Address": winner_addr,
-                "Prize": prize,
-                "Guild": winner_guild,
-            })
+            winners.append(
+                {
+                    "Number": winner_id,
+                    "Address": winner_addr,
+                    "Prize": prize,
+                    "Guild": winner_guild,
+                }
+            )
 
     # Write to file
     with open("data/winner_variables.json", "w") as f:
