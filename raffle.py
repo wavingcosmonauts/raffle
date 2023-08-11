@@ -170,18 +170,17 @@ async def main():
     pool_value, pool_rewards = await get_pool_info(ADDRESS)
     pool_rewards = pool_rewards + stars_remainder - stars_delayed
 
-    stars_raffle = 270 * 2
+    stars_raffle = 100_000
     stars_compound = max(pool_rewards - stars_raffle, 0)
 
-    n_winners = 2
+    n_winners = 10
     prize = stars_raffle / n_winners
 
     print(f"      Note : {stars_compound:.2f} $STARS to compound")
     print(f"Today's 🎁 : {prize:.2f} $STARS for {n_winners} cosmonauts\n")
 
-    async with aiohttp.ClientSession() as session:
-        url = "https://www.wavingcosmonauts.space/assets/cosmonauts/cosmonaut_data.json"
-        cosmonaut_data = await gather_json(session, url)
+    with open("cosmonaut_data.json", "r") as f:
+        cosmonaut_data = json.load(f)
     guilds = [cosmonaut["Guild"] for cosmonaut in cosmonaut_data]
 
     with print_progress("Getting all cosmonaut holders"):
@@ -222,7 +221,7 @@ async def main():
     ]
 
     with print_progress(f"Picking {n_winners} winners"):
-        winner_ids = random.choices(list(cosmonauts), boosts, k=2)
+        winner_ids = random.choices(list(cosmonauts), boosts, k=n_winners)
 
         winners = []
 
