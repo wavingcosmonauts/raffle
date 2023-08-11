@@ -1,9 +1,9 @@
-name: finalraffle
+name: final
 
 on: [push, pull_request]
 
 jobs:
-  test:
+  raffle:
 
     runs-on: ubuntu-20.04
 
